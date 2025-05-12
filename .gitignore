@@ -1,0 +1,31 @@
+# 忽略 Drupal 的 cache 與檔案目錄
+/sites/*/files/*
+!/sites/*/files/.htaccess
+
+# 忽略 Drupal 設定檔（可根據實際狀況調整）
+/sites/*/settings*.php
+/sites/*/services*.yml
+
+# 忽略 Vim/Emacs 暫存檔
+*~
+*.swp
+*.swo
+
+# 忽略 OS 系統檔
+.DS_Store
+Thumbs.db
+
+# 忽略 log / debug 檔
+*.log
+
+# 忽略 composer 和 vendor（如果有）
+/vendor/
+/composer.lock
+
+# 忽略 PHPStorm、VSCode 等 IDE 設定
+.idea/
+.vscode/
+
+# 忽略 node_modules（如果專案有使用）
+/node_modules/
+

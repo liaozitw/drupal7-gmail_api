@@ -1,0 +1,6 @@
+name = Gmail API
+description = Integrate Gmail API in Drupal 7
+core = 7.x
+package = Custom
+dependencies[] = libraries
+

@@ -1,0 +1,221 @@
+<?php
+
+/**
+ * Implements hook_menu().
+ */
+function gmail_api_menu() {
+  $items = array();
+
+  $items['admin/config/services/gmail-api'] = array(
+    'title' => 'Gmail API 設定',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('gmail_api_settings_form'),
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  $items['gmail-api/oauth2callback'] = array(
+    'title' => 'OAuth2 Callback',
+    'page callback' => 'gmail_api_oauth_callback',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+  );
+
+  $items['admin/config/services/gmail-api/test'] = array(
+    'title' => 'Gmail API 測試寄信',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('gmail_api_test_form'),
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  return $items;
+}
+
+/**
+ * Gmail API 設定表單。
+ */
+function gmail_api_settings_form($form, &$form_state) {
+  $form['client_id'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Client ID'),
+    '#default_value' => variable_get('gmail_api_client_id', ''),
+    '#required' => TRUE,
+  );
+  $form['client_secret'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Client Secret'),
+    '#default_value' => variable_get('gmail_api_client_secret', ''),
+    '#required' => TRUE,
+  );
+  $form['redirect_uri'] = array(
+    '#type' => 'item',
+    '#title' => t('Redirect URI'),
+    '#markup' => url('gmail-api/oauth2callback', array('absolute' => TRUE)),
+  );
+  $form['authorize'] = array(
+    '#type' => 'markup',
+    '#markup' => '<p>' . l('➤ 前往 Google 授權', gmail_api_get_auth_url(), array('attributes' => array('target' => '_blank'))) . '</p>',
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('儲存設定'),
+  );
+  return $form;
+}
+
+function gmail_api_settings_form_submit($form, &$form_state) {
+  variable_set('gmail_api_client_id', $form_state['values']['client_id']);
+  variable_set('gmail_api_client_secret', $form_state['values']['client_secret']);
+  drupal_set_message(t('設定已儲存'));
+}
+
+/**
+ * OAuth2 callback。
+ */
+function gmail_api_oauth_callback() {
+  require_once drupal_get_path('module', 'gmail_api') . '/vendor/autoload.php';
+  $client = gmail_api_get_client();
+
+  if (isset($_GET['code'])) {
+    $client->authenticate($_GET['code']);
+    $token = $client->getAccessToken();
+    variable_set('gmail_api_access_token', $token);
+    drupal_set_message('✅ 授權完成並已儲存 access token');
+  } else {
+    drupal_set_message('❌ 授權失敗', 'error');
+  }
+
+  drupal_goto('admin/config/services/gmail-api');
+}
+
+/**
+ * 測試寄信表單。
+ */
+function gmail_api_test_form($form, &$form_state) {
+  $form['to'] = array(
+    '#type' => 'textfield',
+    '#title' => t('收件人 Email'),
+    '#required' => TRUE,
+  );
+  $form['subject'] = array(
+    '#type' => 'textfield',
+    '#title' => t('主旨'),
+    '#default_value' => '這是 Gmail API 測試信件',
+  );
+  $form['message'] = array(
+    '#type' => 'textarea',
+    '#title' => t('內容'),
+    '#default_value' => '這是透過 Drupal 7 使用 Gmail API 寄出的測試信。',
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('送出'),
+  );
+  return $form;
+}
+
+function gmail_api_test_form_submit($form, &$form_state) {
+  $to = $form_state['values']['to'];
+  $subject = $form_state['values']['subject'];
+  $body = $form_state['values']['message'];
+
+  $result = gmail_api_send_email($to, $subject, $body, TRUE);
+  if ($result === TRUE) {
+    drupal_set_message('✅ 信件已成功寄出至 ' . check_plain($to));
+  } else {
+    drupal_set_message('❌ 發送失敗：' . check_plain($result), 'error');
+  }
+}
+
+/**
+ * 預設全站改由 Gmail API 發信（支援 HTML）
+ */
+function gmail_api_mail_alter(&$message) {
+  if (!empty($message['params']['gmail_api_bypass'])) return;
+
+  $to = $message['to'];
+  $subject = $message['subject'];
+  $body = is_array($message['body']) ? implode("<br>", $message['body']) : $message['body'];
+  $body = nl2br(check_plain($body));
+
+  $result = gmail_api_send_email($to, $subject, $body, TRUE);
+
+  if ($result === TRUE) {
+    $message['send'] = FALSE;
+    watchdog('gmail_api', '✅ Gmail API 寄信至 @to | 主旨：@subject', array('@to' => $to, '@subject' => $subject), WATCHDOG_INFO);
+  } else {
+    watchdog('gmail_api', '❌ Gmail API 寄信失敗：@error', array('@error' => $result), WATCHDOG_ERROR);
+  }
+}
+
+/**
+ * 建立 Google Client。
+ */
+function gmail_api_get_client() {
+  require_once drupal_get_path('module', 'gmail_api') . '/vendor/autoload.php';
+
+  $client = new Google_Client();
+  $client->setClientId(variable_get('gmail_api_client_id', ''));
+  $client->setClientSecret(variable_get('gmail_api_client_secret', ''));
+  $client->setRedirectUri(url('gmail-api/oauth2callback', array('absolute' => TRUE)));
+  $client->addScope('https://www.googleapis.com/auth/gmail.send');
+  $client->setAccessType('offline');
+  $client->setApprovalPrompt('force');
+
+  $token = variable_get('gmail_api_access_token', '');
+  if (!empty($token)) {
+    $client->setAccessToken($token);
+    if ($client->isAccessTokenExpired() && $client->getRefreshToken()) {
+      $client->refreshToken($client->getRefreshToken());
+      variable_set('gmail_api_access_token', $client->getAccessToken());
+    }
+  }
+
+  return $client;
+}
+
+/**
+ * 建立 Gmail 授權 URL。
+ */
+function gmail_api_get_auth_url() {
+  $client = gmail_api_get_client();
+  return $client->createAuthUrl();
+}
+
+/**
+ * Gmail API 寄信。
+ */
+function gmail_api_send_email($to, $subject, $message_text, $is_html = FALSE) {
+  $client = gmail_api_get_client();
+  if ($client->isAccessTokenExpired()) {
+    return 'Access token 過期，請重新授權。';
+  }
+
+  try {
+    $service = new Google_Service_Gmail($client);
+    $encoded_subject = "=?UTF-8?B?" . base64_encode($subject) . "?=";
+
+    $headers = "To: $to\r\n";
+    $headers .= "Subject: $encoded_subject\r\n";
+    $headers .= $is_html
+      ? "Content-Type: text/html; charset=UTF-8\r\n"
+      : "Content-Type: text/plain; charset=UTF-8\r\n";
+
+    $raw = $headers . "\r\n" . $message_text;
+    $msg = new Google_Service_Gmail_Message();
+    $msg->setRaw(base64url_encode($raw));
+    $service->users_messages->send('me', $msg);
+    return TRUE;
+  } catch (Exception $e) {
+    return $e->getMessage();
+  }
+}
+
+/**
+ * Base64 for Gmail。
+ */
+function base64url_encode($data) {
+  return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
+}
+
