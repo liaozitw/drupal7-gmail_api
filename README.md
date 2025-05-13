@@ -33,7 +33,7 @@ https://your-site.com/gmail-api/oauth2callback
 ## 後台操作
 - 設定頁面：/admin/config/services/gmail-api
 - 測試寄信：/admin/config/services/gmail-api/test
-- 完成授權後，系統所有信件皆經 Gmail API 發送
+- 完成授權後，系統所有信件皆經 Gmail API 發送 (授權時會登入Google帳號驗證，必須使用與設定 Gmail API相同的帳號，驗證過程有時會出錯，建議多試幾次)
 
 ## 自動使用系統寄信
 模組會使用 hook_mail_alter()：
