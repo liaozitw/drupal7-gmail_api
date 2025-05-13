@@ -19,4 +19,29 @@
 
 ```bash
 composer require google/apiclient:^1.1
+```
 
+## Google API 設定
+
+1. 前往 Google Cloud Console
+2. 建立專案並啟用 Gmail API
+3. 建立 OAuth 憑證，設定 redirect URI 為：
+https://your-site.com/gmail-api/oauth2callback
+
+4. 複製 Client ID / Secret，填入 Drupal 後台
+
+## 後台操作
+- 設定頁面：/admin/config/services/gmail-api
+- 測試寄信：/admin/config/services/gmail-api/test
+- 完成授權後，系統所有信件皆經 Gmail API 發送
+
+## 自動使用系統寄信
+模組會使用 hook_mail_alter()：
+- ✅ 替換系統所有 drupal_mail() 信件
+- ✅ 發送 HTML 郵件
+- ✅ 正確處理中文主旨編碼
+_ ✅ 自動 refresh access token
+
+## 授權與貢獻
+- 授權：MIT
+- 作者：台南意向 & ChatGPT & Grok
