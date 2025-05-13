@@ -40,7 +40,7 @@ https://your-site.com/gmail-api/oauth2callback
 - ✅ 替換系統所有 drupal_mail() 信件
 - ✅ 發送 HTML 郵件
 - ✅ 正確處理中文主旨編碼
-_ ✅ 自動 refresh access token
+- ✅ 自動 refresh access token
 
 ## 授權與貢獻
 - 授權：MIT
